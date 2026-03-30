@@ -35,6 +35,8 @@ export interface Installation {
   appToken: string;
   webhookSecret: string;
   createdAt: string;
+  /** per-installation 自定义配置（如阿里云凭证覆盖） */
+  config?: Record<string, string>;
 }
 
 /** Tool 定义（注册到 Hub manifest） */

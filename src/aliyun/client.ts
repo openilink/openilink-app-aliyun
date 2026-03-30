@@ -12,6 +12,19 @@
 
 import { createHmac, randomUUID } from "node:crypto";
 
+/** 当前请求使用的 AliyunClient 实例（per-installation 凭证隔离） */
+let _currentClient: AliyunClient;
+
+/** 设置当前请求的 AliyunClient */
+export function setCurrentClient(c: AliyunClient): void {
+  _currentClient = c;
+}
+
+/** 获取当前请求的 AliyunClient */
+export function getCurrentClient(): AliyunClient {
+  return _currentClient;
+}
+
 export class AliyunClient {
   private accessKeyId: string;
   private accessKeySecret: string;

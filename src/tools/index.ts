@@ -1,7 +1,11 @@
 /**
  * Tool 注册中心
  * 收集所有 tool 模块的定义和 handler，统一注册到 Hub
+ *
+ * handler 内部通过 getCurrentClient() 获取当前 installation 对应的 AliyunClient，
+ * 实现 per-installation 凭证隔离。
  */
+import { getCurrentClient } from "../aliyun/client.js";
 import type { AliyunClient } from "../aliyun/client.js";
 import type { ToolDefinition, ToolHandler } from "../hub/types.js";
 
@@ -32,14 +36,33 @@ const modules: ToolModule[] = [
 ];
 
 /**
+ * 创建一个代理 AliyunClient，所有方法调用都委托给 getCurrentClient()。
+ * 这样 tool handler 中闭包捕获的 client 实际会动态解析到当前 installation 的客户端。
+ */
+function createClientProxy(): AliyunClient {
+  return new Proxy({} as AliyunClient, {
+    get(_target, prop, _receiver) {
+      const real = getCurrentClient();
+      const value = (real as any)[prop];
+      if (typeof value === "function") {
+        return value.bind(real);
+      }
+      return value;
+    },
+  });
+}
+
+/**
  * 收集所有 tool 的定义和处理函数
- * @param client 阿里云 API 客户端
  * @returns definitions: 全部 tool 定义列表, handlers: 命令名 → 处理函数映射
  */
-export function collectAllTools(client: AliyunClient): {
+export function collectAllTools(): {
   definitions: ToolDefinition[];
   handlers: Map<string, ToolHandler>;
 } {
+  // 使用代理客户端，handler 执行时动态解析到当前 installation 的客户端
+  const proxy = createClientProxy();
+
   const definitions: ToolDefinition[] = [];
   const handlers = new Map<string, ToolHandler>();
 
@@ -47,8 +70,8 @@ export function collectAllTools(client: AliyunClient): {
     // 收集定义
     definitions.push(...mod.definitions);
 
-    // 收集处理函数
-    const modHandlers = mod.createHandlers(client);
+    // 收集处理函数（传入代理客户端）
+    const modHandlers = mod.createHandlers(proxy);
     for (const [name, handler] of modHandlers) {
       if (handlers.has(name)) {
         console.warn(`[tools] 工具名称冲突: ${name}，后者将覆盖前者`);

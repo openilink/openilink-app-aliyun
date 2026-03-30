@@ -109,60 +109,27 @@ function createHandlers(client: AliyunClient): Map<string, ToolHandler> {
     }
   });
 
-  // 列出监听
+  // 列出监听（使用 DescribeLoadBalancerListeners 统一接口）
   handlers.set("list_listeners", async (ctx) => {
     const lbId: string = ctx.args.lb_id ?? "";
 
     try {
-      // 查询 TCP/UDP/HTTP/HTTPS 各类型监听
-      const protocols = ["TCP", "UDP", "HTTP", "HTTPS"];
-      const allListeners: any[] = [];
+      const res = await client.request("slb.aliyuncs.com", "DescribeLoadBalancerListeners", {
+        LoadBalancerId: lbId,
+        MaxResults: "50",
+      });
+      const listeners = res.Listeners ?? [];
 
-      for (const protocol of protocols) {
-        try {
-          const res = await client.request(
-            "slb.aliyuncs.com",
-            `DescribeLoadBalancer${protocol}ListenerAttribute`,
-            {
-              LoadBalancerId: lbId,
-            },
-          );
-          // 单个监听返回的是对象而非数组，这里统一处理
-          if (res.ListenerPort) {
-            allListeners.push({ ...res, Protocol: protocol });
-          }
-        } catch {
-          // 该协议可能无监听，忽略错误
-        }
-      }
-
-      // 也尝试用统一接口
-      try {
-        const res = await client.request("slb.aliyuncs.com", "DescribeLoadBalancerListeners", {
-          LoadBalancerId: lbId,
-          MaxResults: "50",
-        });
-        const listeners = res.Listeners ?? [];
-        if (listeners.length > 0) {
-          const lines = listeners.map((l: any, i: number) => {
-            const status = l.ListenerStatus ?? "未知";
-            return `${i + 1}. ${l.ListenerProtocol ?? "未知"}:${l.ListenerPort} [${status}]\n   后端端口: ${l.BackendServerPort ?? "无"} | 描述: ${l.Description ?? "无"}`;
-          });
-          return `监听列表（共 ${listeners.length} 个）:\n${lines.join("\n")}`;
-        }
-      } catch {
-        // 统一接口不可用时使用上面的分类结果
-      }
-
-      if (allListeners.length === 0) {
+      if (listeners.length === 0) {
         return `负载均衡 ${lbId} 暂无监听`;
       }
 
-      const lines = allListeners.map((l: any, i: number) => {
-        return `${i + 1}. ${l.Protocol}:${l.ListenerPort} [${l.Status ?? "未知"}]\n   后端端口: ${l.BackendServerPort ?? "无"}`;
+      const lines = listeners.map((l: any, i: number) => {
+        const status = l.ListenerStatus ?? "未知";
+        return `${i + 1}. ${l.ListenerProtocol ?? "未知"}:${l.ListenerPort} [${status}]\n   后端端口: ${l.BackendServerPort ?? "无"} | 描述: ${l.Description ?? "无"}`;
       });
 
-      return `监听列表（共 ${allListeners.length} 个）:\n${lines.join("\n")}`;
+      return `监听列表（共 ${listeners.length} 个）:\n${lines.join("\n")}`;
     } catch (err: any) {
       return `列出监听失败: ${err.message ?? err}`;
     }

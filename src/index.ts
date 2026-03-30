@@ -4,7 +4,7 @@
 import http from "node:http";
 import { loadConfig } from "./config.js";
 import { Store } from "./store.js";
-import { AliyunClient } from "./aliyun/client.js";
+import { AliyunClient, setCurrentClient } from "./aliyun/client.js";
 import { HubClient } from "./hub/client.js";
 import { Router } from "./router.js";
 import { handleWebhook } from "./hub/webhook.js";
@@ -29,16 +29,17 @@ async function main(): Promise<void> {
   const store = new Store(config.dbPath);
   console.log("[main] 数据库初始化完成");
 
-  // 3. 初始化阿里云客户端
-  const aliyunClient = new AliyunClient(
+  // 3. 初始化默认阿里云客户端（用于启动同步等非请求场景）
+  const defaultClient = new AliyunClient(
     config.aliyunAccessKeyId,
     config.aliyunAccessKeySecret,
     config.aliyunRegion,
   );
-  console.log("[main] 阿里云客户端初始化完成");
+  setCurrentClient(defaultClient);
+  console.log("[main] 阿里云默认客户端初始化完成");
 
-  // 4. 收集所有 tools
-  const { definitions, handlers } = collectAllTools(aliyunClient);
+  // 4. 收集所有 tools（handler 通过 getCurrentClient() 动态获取客户端）
+  const { definitions, handlers } = collectAllTools();
   console.log(`[main] 已注册 ${definitions.length} 个工具`);
 
   // 5. 初始化路由器
@@ -51,10 +52,18 @@ async function main(): Promise<void> {
 
   /**
    * 处理 command 事件
+   * 根据 installation.config 动态切换阿里云客户端，实现 per-installation 凭证隔离。
    * 返回工具执行结果文本，null 表示无需回复
    */
   async function onCommand(event: HubEvent, installation: Installation): Promise<string | null> {
     if (!event.event) return null;
+
+    // 根据 installation 的自定义配置构建当前请求的阿里云客户端
+    const akId = installation.config?.aliyun_access_key_id || config.aliyunAccessKeyId;
+    const akSecret = installation.config?.aliyun_access_key_secret || config.aliyunAccessKeySecret;
+    const region = installation.config?.aliyun_region || config.aliyunRegion;
+    setCurrentClient(new AliyunClient(akId, akSecret, region));
+
     const hubClient = getHubClient(installation);
     const result = await router.handleCommand(event, installation, hubClient);
     return result;
