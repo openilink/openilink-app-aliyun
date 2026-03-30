@@ -64,6 +64,6 @@ export function getManifest(
       required: ["aliyun_access_key_id", "aliyun_access_key_secret"],
     },
     guide:
-      "## 阿里云安装指南\n### 第 1 步\n访问 [阿里云 AccessKey 管理](https://ram.console.aliyun.com/manage/ak)\n### 第 2 步\n创建或获取 AccessKey ID 和 AccessKey Secret\n### 第 3 步\n将 AccessKey 填入上方配置并安装\n\n> 建议使用 RAM 子账号的 AccessKey，避免使用主账号 AccessKey",
+      "## 阿里云安装指南\n### 第 1 步\n访问 [阿里云 AccessKey 管理](https://ram.console.aliyun.com/manage/ak)\n### 第 2 步\n创建或获取 AccessKey ID 和 AccessKey Secret\n### 第 3 步\n将 AccessKey 填入上方配置并安装\n\n> 建议使用 RAM 子账号的 AccessKey，避免使用主账号 AccessKey\n\n安装后可通过 /settings 页面随时修改配置。",
   };
 }
