@@ -52,16 +52,17 @@ async function main(): Promise<void> {
 
   /**
    * 处理 command 事件
-   * 根据 installation.config 动态切换阿里云客户端，实现 per-installation 凭证隔离。
+   * 从本地加密存储读取 per-installation 配置，动态切换阿里云客户端。
    * 返回工具执行结果文本，null 表示无需回复
    */
   async function onCommand(event: HubEvent, installation: Installation): Promise<string | null> {
     if (!event.event) return null;
 
-    // 根据 installation 的自定义配置构建当前请求的阿里云客户端
-    const akId = installation.config?.aliyun_access_key_id || config.aliyunAccessKeyId;
-    const akSecret = installation.config?.aliyun_access_key_secret || config.aliyunAccessKeySecret;
-    const region = installation.config?.aliyun_region || config.aliyunRegion;
+    // 从加密存储读取 per-installation 配置，替代内存中的 installation.config
+    const localConfig = store.getDecryptedConfig(installation.id);
+    const akId = localConfig.aliyun_access_key_id || config.aliyunAccessKeyId;
+    const akSecret = localConfig.aliyun_access_key_secret || config.aliyunAccessKeySecret;
+    const region = localConfig.aliyun_region || config.aliyunRegion;
     setCurrentClient(new AliyunClient(akId, akSecret, region));
 
     const hubClient = getHubClient(installation);
@@ -111,8 +112,16 @@ async function main(): Promise<void> {
           createdAt: new Date().toISOString(),
         });
         console.log("[oauth] 模式2安装成功, installation_id:", data.installation_id);
+        // 安装后从 Hub 拉取用户配置并加密存储
+        const mode2HubClient = new HubClient(data.hub_url || config.hubUrl, data.app_token);
+        mode2HubClient.fetchConfig().then((userConfig) => {
+          if (Object.keys(userConfig).length > 0) {
+            store.saveEncryptedConfig(data.installation_id, userConfig);
+            console.log("[oauth] 模式2用户配置已加密存储");
+          }
+        }).catch((err) => console.error("[oauth] 模式2拉取配置失败:", err));
         // 异步同步工具定义到 Hub
-        new HubClient(data.hub_url || config.hubUrl, data.app_token)
+        mode2HubClient
           .syncTools(definitions)
           .catch((err) => console.error("[oauth] 模式2同步工具失败:", err));
         res.writeHead(200, { "Content-Type": "application/json" });
