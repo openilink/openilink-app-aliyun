@@ -27,6 +27,7 @@ import { vpcTools } from "./vpc.js";
 import { rdsTools } from "./rds.js";
 import { redisTools } from "./redis.js";
 import { domainTools } from "./domain.js";
+import { apiTools } from "./api.js";
 
 /** 所有 tool 模块列表 */
 const modules: ToolModule[] = [
@@ -41,6 +42,7 @@ const modules: ToolModule[] = [
   rdsTools,
   redisTools,
   domainTools,
+  apiTools,
 ];
 
 /**
