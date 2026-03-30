@@ -70,6 +70,60 @@ const definitions: ToolDefinition[] = [
       required: ["instance_id"],
     },
   },
+  {
+    name: "list_images",
+    description: "列出 ECS 镜像",
+    command: "list_images",
+    parameters: {
+      type: "object",
+      properties: {
+        region: {
+          type: "string",
+          description: "区域 ID，如 cn-hangzhou，不填则使用默认区域",
+        },
+        image_owner: {
+          type: "string",
+          description: "镜像来源: self(自定义) / system(系统) / marketplace(市场)，默认 self",
+        },
+      },
+    },
+  },
+  {
+    name: "list_disks",
+    description: "列出 ECS 云盘",
+    command: "list_disks",
+    parameters: {
+      type: "object",
+      properties: {
+        region: {
+          type: "string",
+          description: "区域 ID，如 cn-hangzhou，不填则使用默认区域",
+        },
+        instance_id: {
+          type: "string",
+          description: "实例 ID，不填则列出所有云盘",
+        },
+      },
+    },
+  },
+  {
+    name: "list_snapshots",
+    description: "列出 ECS 快照",
+    command: "list_snapshots",
+    parameters: {
+      type: "object",
+      properties: {
+        region: {
+          type: "string",
+          description: "区域 ID，如 cn-hangzhou，不填则使用默认区域",
+        },
+        disk_id: {
+          type: "string",
+          description: "云盘 ID，不填则列出所有快照",
+        },
+      },
+    },
+  },
 ];
 
 /** 创建 ECS 模块的 handler 映射 */
@@ -192,6 +246,108 @@ function createHandlers(client: AliyunClient): Map<string, ToolHandler> {
       return `实例 ${instanceId} 重启指令已发送，请稍后查看状态`;
     } catch (err: any) {
       return `重启实例失败: ${err.message ?? err}`;
+    }
+  });
+
+  // 列出镜像
+  handlers.set("list_images", async (ctx) => {
+    const region = (ctx.args.region as string) || undefined;
+    const imageOwner = (ctx.args.image_owner as string) || "self";
+    const params: Record<string, string> = {
+      PageSize: "50",
+      ImageOwnerAlias: imageOwner,
+    };
+    if (region) {
+      params.RegionId = region;
+    }
+
+    try {
+      const res = await client.request("ecs.aliyuncs.com", "DescribeImages", params);
+      const images = res.Images?.Image ?? [];
+
+      if (images.length === 0) {
+        return "当前区域暂无镜像";
+      }
+
+      const lines = images.map((img: any, i: number) => {
+        const size = img.Size ?? "未知";
+        const status = img.Status ?? "未知";
+        return `${i + 1}. ${img.ImageName || img.ImageId} [${status}]\n   ID: ${img.ImageId} | 大小: ${size}GB | 系统: ${img.OSName ?? img.OSType ?? "未知"} | 创建: ${img.CreationTime ?? "未知"}`;
+      });
+
+      return `镜像列表（共 ${images.length} 个）:\n${lines.join("\n")}`;
+    } catch (err: any) {
+      return `列出镜像失败: ${err.message ?? err}`;
+    }
+  });
+
+  // 列出云盘
+  handlers.set("list_disks", async (ctx) => {
+    const region = (ctx.args.region as string) || undefined;
+    const instanceId = (ctx.args.instance_id as string) || undefined;
+    const params: Record<string, string> = {
+      PageSize: "50",
+    };
+    if (region) {
+      params.RegionId = region;
+    }
+    if (instanceId) {
+      params.InstanceId = instanceId;
+    }
+
+    try {
+      const res = await client.request("ecs.aliyuncs.com", "DescribeDisks", params);
+      const disks = res.Disks?.Disk ?? [];
+
+      if (disks.length === 0) {
+        return "当前区域暂无云盘";
+      }
+
+      const lines = disks.map((d: any, i: number) => {
+        const status = d.Status ?? "未知";
+        const size = d.Size ?? "未知";
+        const category = d.Category ?? "未知";
+        const attachedTo = d.InstanceId || "未挂载";
+        return `${i + 1}. ${d.DiskName || d.DiskId} [${status}]\n   ID: ${d.DiskId} | 大小: ${size}GB | 类型: ${category} | 挂载: ${attachedTo}`;
+      });
+
+      return `云盘列表（共 ${disks.length} 个）:\n${lines.join("\n")}`;
+    } catch (err: any) {
+      return `列出云盘失败: ${err.message ?? err}`;
+    }
+  });
+
+  // 列出快照
+  handlers.set("list_snapshots", async (ctx) => {
+    const region = (ctx.args.region as string) || undefined;
+    const diskId = (ctx.args.disk_id as string) || undefined;
+    const params: Record<string, string> = {
+      PageSize: "50",
+    };
+    if (region) {
+      params.RegionId = region;
+    }
+    if (diskId) {
+      params.DiskId = diskId;
+    }
+
+    try {
+      const res = await client.request("ecs.aliyuncs.com", "DescribeSnapshots", params);
+      const snapshots = res.Snapshots?.Snapshot ?? [];
+
+      if (snapshots.length === 0) {
+        return "当前区域暂无快照";
+      }
+
+      const lines = snapshots.map((s: any, i: number) => {
+        const status = s.Status ?? "未知";
+        const size = s.SourceDiskSize ?? "未知";
+        return `${i + 1}. ${s.SnapshotName || s.SnapshotId} [${status}]\n   ID: ${s.SnapshotId} | 源盘大小: ${size}GB | 创建: ${s.CreationTime ?? "未知"} | 进度: ${s.Progress ?? "未知"}`;
+      });
+
+      return `快照列表（共 ${snapshots.length} 个）:\n${lines.join("\n")}`;
+    } catch (err: any) {
+      return `列出快照失败: ${err.message ?? err}`;
     }
   });
 

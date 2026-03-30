@@ -23,6 +23,10 @@ import { sslTools } from "./ssl.js";
 import { slbTools } from "./slb.js";
 import { securityTools } from "./security.js";
 import { billingTools } from "./billing.js";
+import { vpcTools } from "./vpc.js";
+import { rdsTools } from "./rds.js";
+import { redisTools } from "./redis.js";
+import { domainTools } from "./domain.js";
 
 /** 所有 tool 模块列表 */
 const modules: ToolModule[] = [
@@ -33,6 +37,10 @@ const modules: ToolModule[] = [
   slbTools,
   securityTools,
   billingTools,
+  vpcTools,
+  rdsTools,
+  redisTools,
+  domainTools,
 ];
 
 /**

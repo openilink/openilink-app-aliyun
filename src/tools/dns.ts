@@ -56,6 +56,34 @@ const definitions: ToolDefinition[] = [
       required: ["record_id"],
     },
   },
+  {
+    name: "update_dns_record",
+    description: "更新 DNS 解析记录",
+    command: "update_dns_record",
+    parameters: {
+      type: "object",
+      properties: {
+        record_id: { type: "string", description: "解析记录 ID" },
+        rr: { type: "string", description: "主机记录，如 www、@、mail" },
+        type: { type: "string", description: "记录类型: A / CNAME / MX / TXT / AAAA 等" },
+        value: { type: "string", description: "记录值，如 IP 地址或 CNAME 目标" },
+      },
+      required: ["record_id", "rr", "type", "value"],
+    },
+  },
+  {
+    name: "set_dns_status",
+    description: "启用或暂停 DNS 解析记录",
+    command: "set_dns_status",
+    parameters: {
+      type: "object",
+      properties: {
+        record_id: { type: "string", description: "解析记录 ID" },
+        status: { type: "string", description: "状态: Enable(启用) / Disable(暂停)" },
+      },
+      required: ["record_id", "status"],
+    },
+  },
 ];
 
 /** 创建 DNS 模块的 handler 映射 */
@@ -143,6 +171,45 @@ function createHandlers(client: AliyunClient): Map<string, ToolHandler> {
       return `解析记录 ${recordId} 已删除`;
     } catch (err: any) {
       return `删除解析记录失败: ${err.message ?? err}`;
+    }
+  });
+
+  // 更新解析记录
+  handlers.set("update_dns_record", async (ctx) => {
+    const recordId: string = ctx.args.record_id ?? "";
+    const rr: string = ctx.args.rr ?? "";
+    const type: string = ctx.args.type ?? "";
+    const value: string = ctx.args.value ?? "";
+
+    try {
+      await client.request("alidns.aliyuncs.com", "UpdateDomainRecord", {
+        RecordId: recordId,
+        RR: rr,
+        Type: type,
+        Value: value,
+      });
+
+      return `解析记录更新成功!\n记录 ID: ${recordId}\n${rr} → ${value} (${type})`;
+    } catch (err: any) {
+      return `更新解析记录失败: ${err.message ?? err}`;
+    }
+  });
+
+  // 启用/暂停解析记录
+  handlers.set("set_dns_status", async (ctx) => {
+    const recordId: string = ctx.args.record_id ?? "";
+    const status: string = ctx.args.status ?? "";
+
+    try {
+      await client.request("alidns.aliyuncs.com", "SetDomainRecordStatus", {
+        RecordId: recordId,
+        Status: status,
+      });
+
+      const statusText = status === "Enable" ? "启用" : "暂停";
+      return `解析记录 ${recordId} 已${statusText}`;
+    } catch (err: any) {
+      return `设置解析记录状态失败: ${err.message ?? err}`;
     }
   });
 

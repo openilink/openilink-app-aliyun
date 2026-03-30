@@ -168,6 +168,10 @@ export class AliyunClient {
       "slb.aliyuncs.com": "2014-05-15",
       "business.aliyuncs.com": "2017-12-14",
       "bssopenapi.aliyuncs.com": "2017-12-14",
+      "vpc.aliyuncs.com": "2016-04-28",
+      "rds.aliyuncs.com": "2014-08-15",
+      "r-kvstore.aliyuncs.com": "2015-01-01",
+      "domain.aliyuncs.com": "2018-01-29",
     };
 
     // 尝试精确匹配

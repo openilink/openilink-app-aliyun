@@ -47,6 +47,33 @@ const definitions: ToolDefinition[] = [
       required: ["urls"],
     },
   },
+  {
+    name: "get_cdn_domain_detail",
+    description: "获取 CDN 加速域名详情",
+    command: "get_cdn_domain_detail",
+    parameters: {
+      type: "object",
+      properties: {
+        domain: { type: "string", description: "CDN 加速域名" },
+      },
+      required: ["domain"],
+    },
+  },
+  {
+    name: "get_cdn_usage",
+    description: "查询 CDN 域名用量数据（带宽或流量）",
+    command: "get_cdn_usage",
+    parameters: {
+      type: "object",
+      properties: {
+        domain: { type: "string", description: "CDN 加速域名" },
+        start_time: { type: "string", description: "开始时间，ISO 格式如 2024-01-01T00:00:00Z" },
+        end_time: { type: "string", description: "结束时间，ISO 格式如 2024-01-02T00:00:00Z" },
+        field: { type: "string", description: "查询字段: bps(带宽) 或 traf(流量)，默认 bps" },
+      },
+      required: ["domain", "start_time", "end_time"],
+    },
+  },
 ];
 
 /** 将逗号或换行分隔的 URL 字符串转为换行分隔 */
@@ -122,6 +149,75 @@ function createHandlers(client: AliyunClient): Map<string, ToolHandler> {
       return `CDN 预热任务已提交!\n任务 ID: ${res.PushTaskId}\n预热 URL:\n${objectPath}`;
     } catch (err: any) {
       return `CDN 预热失败: ${err.message ?? err}`;
+    }
+  });
+
+  // 获取 CDN 域名详情
+  handlers.set("get_cdn_domain_detail", async (ctx) => {
+    const domain: string = ctx.args.domain ?? "";
+
+    try {
+      const res = await client.request("cdn.aliyuncs.com", "DescribeCdnDomainDetail", {
+        DomainName: domain,
+      });
+      const detail = res.GetDomainDetailModel ?? {};
+
+      const sources = detail.SourceModels?.SourceModel ?? [];
+      const sourceLines = sources.map((s: any) => `${s.Content} (${s.Type ?? "未知"}, 端口: ${s.Port ?? "未知"})`).join(", ");
+
+      const lines = [
+        `域名: ${detail.DomainName ?? domain}`,
+        `状态: ${detail.DomainStatus ?? "未知"}`,
+        `CNAME: ${detail.Cname ?? "无"}`,
+        `CDN 类型: ${detail.CdnType ?? "未知"}`,
+        `源站: ${sourceLines || "无"}`,
+        `HTTPS: ${detail.ServerCertificateStatus === "on" ? "已开启" : "未开启"}`,
+        `区域: ${detail.Scope ?? "未知"}`,
+        `创建时间: ${detail.GmtCreated ?? "未知"}`,
+        `修改时间: ${detail.GmtModified ?? "未知"}`,
+      ];
+
+      return lines.join("\n");
+    } catch (err: any) {
+      return `获取 CDN 域名详情失败: ${err.message ?? err}`;
+    }
+  });
+
+  // 查询 CDN 用量数据
+  handlers.set("get_cdn_usage", async (ctx) => {
+    const domain: string = ctx.args.domain ?? "";
+    const startTime: string = ctx.args.start_time ?? "";
+    const endTime: string = ctx.args.end_time ?? "";
+    const field: string = ctx.args.field ?? "bps";
+
+    try {
+      const res = await client.request("cdn.aliyuncs.com", "DescribeDomainUsageData", {
+        DomainName: domain,
+        StartTime: startTime,
+        EndTime: endTime,
+        Field: field,
+      });
+
+      const entries = res.UsageDataPerInterval?.DataModule ?? [];
+      if (entries.length === 0) {
+        return `域名 ${domain} 在指定时间段内无用量数据`;
+      }
+
+      const fieldLabel = field === "traf" ? "流量" : "带宽";
+      const unit = field === "traf" ? "bytes" : "bps";
+
+      const lines = entries.slice(0, 24).map((e: any) => {
+        return `  ${e.TimeStamp}: ${e.Value} ${unit}`;
+      });
+
+      let result = `${domain} ${fieldLabel}用量（${startTime} ~ ${endTime}）:\n${lines.join("\n")}`;
+      if (entries.length > 24) {
+        result += `\n... 共 ${entries.length} 条，仅显示前 24 条`;
+      }
+
+      return result;
+    } catch (err: any) {
+      return `查询 CDN 用量失败: ${err.message ?? err}`;
     }
   });
 
