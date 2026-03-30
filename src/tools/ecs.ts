@@ -124,6 +124,74 @@ const definitions: ToolDefinition[] = [
       },
     },
   },
+  {
+    name: "create_instance",
+    description: "创建 ECS 实例（简化版，仅支持基本参数，复杂配置建议使用控制台）",
+    command: "create_instance",
+    parameters: {
+      type: "object",
+      properties: {
+        region: { type: "string", description: "区域 ID，如 cn-hangzhou" },
+        image_id: { type: "string", description: "镜像 ID" },
+        instance_type: { type: "string", description: "实例规格，如 ecs.t6-c1m1.large" },
+        security_group_id: { type: "string", description: "安全组 ID" },
+        vswitch_id: { type: "string", description: "交换机 ID（VPC 网络必填）" },
+        instance_name: { type: "string", description: "实例名称，可选" },
+      },
+      required: ["region", "image_id", "instance_type", "security_group_id", "vswitch_id"],
+    },
+  },
+  {
+    name: "delete_instance",
+    description: "释放 ECS 实例（仅支持按量付费或已过期的包年包月实例）",
+    command: "delete_instance",
+    parameters: {
+      type: "object",
+      properties: {
+        instance_id: { type: "string", description: "实例 ID" },
+        force: { type: "string", description: "是否强制释放: true / false，默认 false" },
+      },
+      required: ["instance_id"],
+    },
+  },
+  {
+    name: "modify_instance",
+    description: "修改 ECS 实例名称",
+    command: "modify_instance",
+    parameters: {
+      type: "object",
+      properties: {
+        instance_id: { type: "string", description: "实例 ID" },
+        instance_name: { type: "string", description: "新的实例名称" },
+      },
+      required: ["instance_id", "instance_name"],
+    },
+  },
+  {
+    name: "create_snapshot",
+    description: "为云盘创建快照",
+    command: "create_snapshot",
+    parameters: {
+      type: "object",
+      properties: {
+        disk_id: { type: "string", description: "云盘 ID" },
+        snapshot_name: { type: "string", description: "快照名称，可选" },
+      },
+      required: ["disk_id"],
+    },
+  },
+  {
+    name: "delete_snapshot",
+    description: "删除快照",
+    command: "delete_snapshot",
+    parameters: {
+      type: "object",
+      properties: {
+        snapshot_id: { type: "string", description: "快照 ID" },
+      },
+      required: ["snapshot_id"],
+    },
+  },
 ];
 
 /** 创建 ECS 模块的 handler 映射 */
@@ -348,6 +416,107 @@ function createHandlers(client: AliyunClient): Map<string, ToolHandler> {
       return `快照列表（共 ${snapshots.length} 个）:\n${lines.join("\n")}`;
     } catch (err: any) {
       return `列出快照失败: ${err.message ?? err}`;
+    }
+  });
+
+  // 创建 ECS 实例（简化版）
+  handlers.set("create_instance", async (ctx) => {
+    const region: string = ctx.args.region ?? "";
+    const imageId: string = ctx.args.image_id ?? "";
+    const instanceType: string = ctx.args.instance_type ?? "";
+    const securityGroupId: string = ctx.args.security_group_id ?? "";
+    const vswitchId: string = ctx.args.vswitch_id ?? "";
+    const instanceName: string = ctx.args.instance_name ?? "";
+
+    const params: Record<string, string> = {
+      RegionId: region,
+      ImageId: imageId,
+      InstanceType: instanceType,
+      SecurityGroupId: securityGroupId,
+      VSwitchId: vswitchId,
+      InternetChargeType: "PayByTraffic",
+      InternetMaxBandwidthOut: "1",
+      InstanceChargeType: "PostPaid",
+    };
+    if (instanceName) {
+      params.InstanceName = instanceName;
+    }
+
+    try {
+      const res = await client.request("ecs.aliyuncs.com", "CreateInstance", params);
+      return `ECS 实例创建成功!\n实例 ID: ${res.InstanceId}\n提示: 实例创建后处于 Stopped 状态，请使用 start_instance 启动。\n如需更复杂的配置（如数据盘、密钥对等），建议使用阿里云控制台。`;
+    } catch (err: any) {
+      return `创建 ECS 实例失败: ${err.message ?? err}`;
+    }
+  });
+
+  // 释放 ECS 实例
+  handlers.set("delete_instance", async (ctx) => {
+    const instanceId: string = ctx.args.instance_id ?? "";
+    const force: string = ctx.args.force ?? "false";
+
+    const params: Record<string, string> = {
+      InstanceId: instanceId,
+    };
+    if (force === "true") {
+      params.Force = "true";
+    }
+
+    try {
+      await client.request("ecs.aliyuncs.com", "DeleteInstance", params);
+      return `实例 ${instanceId} 已释放`;
+    } catch (err: any) {
+      return `释放实例失败: ${err.message ?? err}`;
+    }
+  });
+
+  // 修改 ECS 实例名称
+  handlers.set("modify_instance", async (ctx) => {
+    const instanceId: string = ctx.args.instance_id ?? "";
+    const instanceName: string = ctx.args.instance_name ?? "";
+
+    try {
+      await client.request("ecs.aliyuncs.com", "ModifyInstanceAttribute", {
+        InstanceId: instanceId,
+        InstanceName: instanceName,
+      });
+      return `实例 ${instanceId} 名称已修改为: ${instanceName}`;
+    } catch (err: any) {
+      return `修改实例名称失败: ${err.message ?? err}`;
+    }
+  });
+
+  // 创建快照
+  handlers.set("create_snapshot", async (ctx) => {
+    const diskId: string = ctx.args.disk_id ?? "";
+    const snapshotName: string = ctx.args.snapshot_name ?? "";
+
+    const params: Record<string, string> = {
+      DiskId: diskId,
+    };
+    if (snapshotName) {
+      params.SnapshotName = snapshotName;
+    }
+
+    try {
+      const res = await client.request("ecs.aliyuncs.com", "CreateSnapshot", params);
+      return `快照创建任务已提交!\n快照 ID: ${res.SnapshotId}\n云盘 ID: ${diskId}\n提示: 快照创建需要一定时间，请稍后查看进度。`;
+    } catch (err: any) {
+      return `创建快照失败: ${err.message ?? err}`;
+    }
+  });
+
+  // 删除快照
+  handlers.set("delete_snapshot", async (ctx) => {
+    const snapshotId: string = ctx.args.snapshot_id ?? "";
+
+    try {
+      await client.request("ecs.aliyuncs.com", "DeleteSnapshot", {
+        SnapshotId: snapshotId,
+      });
+      return `快照 ${snapshotId} 已删除`;
+    } catch (err: any) {
+      return `删除快照失败: ${err.message ?? err}`;
     }
   });
 

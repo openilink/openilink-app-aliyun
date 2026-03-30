@@ -47,6 +47,33 @@ const definitions: ToolDefinition[] = [
       },
     },
   },
+  {
+    name: "create_vpc",
+    description: "创建 VPC 专有网络",
+    command: "create_vpc",
+    parameters: {
+      type: "object",
+      properties: {
+        region: { type: "string", description: "区域 ID，如 cn-hangzhou" },
+        cidr_block: { type: "string", description: "VPC 网段，如 172.16.0.0/12、10.0.0.0/8、192.168.0.0/16" },
+        vpc_name: { type: "string", description: "VPC 名称，可选" },
+        description: { type: "string", description: "VPC 描述，可选" },
+      },
+      required: ["region", "cidr_block"],
+    },
+  },
+  {
+    name: "delete_vpc",
+    description: "删除 VPC 专有网络（需先删除 VPC 下的所有资源）",
+    command: "delete_vpc",
+    parameters: {
+      type: "object",
+      properties: {
+        vpc_id: { type: "string", description: "VPC ID" },
+      },
+      required: ["vpc_id"],
+    },
+  },
 ];
 
 /** 创建 VPC 模块的 handler 映射 */
@@ -144,6 +171,46 @@ function createHandlers(client: AliyunClient): Map<string, ToolHandler> {
       return `弹性公网 IP 列表（共 ${eips.length} 个）:\n${lines.join("\n")}`;
     } catch (err: any) {
       return `列出弹性公网 IP 失败: ${err.message ?? err}`;
+    }
+  });
+
+  // 创建 VPC
+  handlers.set("create_vpc", async (ctx) => {
+    const region: string = ctx.args.region ?? "";
+    const cidrBlock: string = ctx.args.cidr_block ?? "";
+    const vpcName: string = ctx.args.vpc_name ?? "";
+    const description: string = ctx.args.description ?? "";
+
+    const params: Record<string, string> = {
+      RegionId: region,
+      CidrBlock: cidrBlock,
+    };
+    if (vpcName) {
+      params.VpcName = vpcName;
+    }
+    if (description) {
+      params.Description = description;
+    }
+
+    try {
+      const res = await client.request("vpc.aliyuncs.com", "CreateVpc", params);
+      return `VPC 创建成功!\nVPC ID: ${res.VpcId}\n区域: ${region}\n网段: ${cidrBlock}`;
+    } catch (err: any) {
+      return `创建 VPC 失败: ${err.message ?? err}`;
+    }
+  });
+
+  // 删除 VPC
+  handlers.set("delete_vpc", async (ctx) => {
+    const vpcId: string = ctx.args.vpc_id ?? "";
+
+    try {
+      await client.request("vpc.aliyuncs.com", "DeleteVpc", {
+        VpcId: vpcId,
+      });
+      return `VPC ${vpcId} 已删除`;
+    } catch (err: any) {
+      return `删除 VPC 失败: ${err.message ?? err}`;
     }
   });
 

@@ -46,6 +46,46 @@ const definitions: ToolDefinition[] = [
       required: ["instance_id"],
     },
   },
+  {
+    name: "restart_rds",
+    description: "重启 RDS 实例",
+    command: "restart_rds",
+    parameters: {
+      type: "object",
+      properties: {
+        instance_id: { type: "string", description: "RDS 实例 ID" },
+      },
+      required: ["instance_id"],
+    },
+  },
+  {
+    name: "create_rds_database",
+    description: "在 RDS 实例中创建数据库",
+    command: "create_rds_database",
+    parameters: {
+      type: "object",
+      properties: {
+        instance_id: { type: "string", description: "RDS 实例 ID" },
+        db_name: { type: "string", description: "数据库名称" },
+        charset: { type: "string", description: "字符集，如 utf8、utf8mb4、gbk，默认 utf8mb4" },
+        description: { type: "string", description: "数据库描述，可选" },
+      },
+      required: ["instance_id", "db_name"],
+    },
+  },
+  {
+    name: "delete_rds_database",
+    description: "删除 RDS 实例中的数据库",
+    command: "delete_rds_database",
+    parameters: {
+      type: "object",
+      properties: {
+        instance_id: { type: "string", description: "RDS 实例 ID" },
+        db_name: { type: "string", description: "数据库名称" },
+      },
+      required: ["instance_id", "db_name"],
+    },
+  },
 ];
 
 /** 创建 RDS 模块的 handler 映射 */
@@ -143,6 +183,60 @@ function createHandlers(client: AliyunClient): Map<string, ToolHandler> {
       return `RDS 实例 ${instanceId} 数据库列表（共 ${databases.length} 个）:\n${lines.join("\n")}`;
     } catch (err: any) {
       return `列出数据库失败: ${err.message ?? err}`;
+    }
+  });
+
+  // 重启 RDS 实例
+  handlers.set("restart_rds", async (ctx) => {
+    const instanceId: string = ctx.args.instance_id ?? "";
+
+    try {
+      await client.request("rds.aliyuncs.com", "RestartDBInstance", {
+        DBInstanceId: instanceId,
+      });
+      return `RDS 实例 ${instanceId} 重启指令已发送，请稍后查看状态`;
+    } catch (err: any) {
+      return `重启 RDS 实例失败: ${err.message ?? err}`;
+    }
+  });
+
+  // 创建数据库
+  handlers.set("create_rds_database", async (ctx) => {
+    const instanceId: string = ctx.args.instance_id ?? "";
+    const dbName: string = ctx.args.db_name ?? "";
+    const charset: string = ctx.args.charset ?? "utf8mb4";
+    const description: string = ctx.args.description ?? "";
+
+    const params: Record<string, string> = {
+      DBInstanceId: instanceId,
+      DBName: dbName,
+      CharacterSetName: charset,
+    };
+    if (description) {
+      params.DBDescription = description;
+    }
+
+    try {
+      await client.request("rds.aliyuncs.com", "CreateDatabase", params);
+      return `数据库创建成功!\n实例: ${instanceId}\n数据库名: ${dbName}\n字符集: ${charset}`;
+    } catch (err: any) {
+      return `创建数据库失败: ${err.message ?? err}`;
+    }
+  });
+
+  // 删除数据库
+  handlers.set("delete_rds_database", async (ctx) => {
+    const instanceId: string = ctx.args.instance_id ?? "";
+    const dbName: string = ctx.args.db_name ?? "";
+
+    try {
+      await client.request("rds.aliyuncs.com", "DeleteDatabase", {
+        DBInstanceId: instanceId,
+        DBName: dbName,
+      });
+      return `数据库 ${dbName} 已从实例 ${instanceId} 中删除`;
+    } catch (err: any) {
+      return `删除数据库失败: ${err.message ?? err}`;
     }
   });
 

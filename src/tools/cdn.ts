@@ -74,6 +74,58 @@ const definitions: ToolDefinition[] = [
       required: ["domain", "start_time", "end_time"],
     },
   },
+  {
+    name: "add_cdn_domain",
+    description: "添加 CDN 加速域名",
+    command: "add_cdn_domain",
+    parameters: {
+      type: "object",
+      properties: {
+        domain: { type: "string", description: "加速域名，如 cdn.example.com" },
+        cdn_type: { type: "string", description: "业务类型: web(网页) / download(下载) / video(视频)，默认 web" },
+        source_type: { type: "string", description: "源站类型: ipaddr(IP) / domain(域名) / oss(OSS Bucket)，默认 ipaddr" },
+        source_content: { type: "string", description: "源站地址（IP 或域名）" },
+        source_port: { type: "string", description: "端口号: 80 / 443，默认 80" },
+      },
+      required: ["domain", "source_content"],
+    },
+  },
+  {
+    name: "delete_cdn_domain",
+    description: "删除 CDN 加速域名",
+    command: "delete_cdn_domain",
+    parameters: {
+      type: "object",
+      properties: {
+        domain: { type: "string", description: "CDN 加速域名" },
+      },
+      required: ["domain"],
+    },
+  },
+  {
+    name: "start_cdn_domain",
+    description: "启用 CDN 加速域名",
+    command: "start_cdn_domain",
+    parameters: {
+      type: "object",
+      properties: {
+        domain: { type: "string", description: "CDN 加速域名" },
+      },
+      required: ["domain"],
+    },
+  },
+  {
+    name: "stop_cdn_domain",
+    description: "停用 CDN 加速域名",
+    command: "stop_cdn_domain",
+    parameters: {
+      type: "object",
+      properties: {
+        domain: { type: "string", description: "CDN 加速域名" },
+      },
+      required: ["domain"],
+    },
+  },
 ];
 
 /** 将逗号或换行分隔的 URL 字符串转为换行分隔 */
@@ -218,6 +270,75 @@ function createHandlers(client: AliyunClient): Map<string, ToolHandler> {
       return result;
     } catch (err: any) {
       return `查询 CDN 用量失败: ${err.message ?? err}`;
+    }
+  });
+
+  // 添加 CDN 加速域名
+  handlers.set("add_cdn_domain", async (ctx) => {
+    const domain: string = ctx.args.domain ?? "";
+    const cdnType: string = ctx.args.cdn_type ?? "web";
+    const sourceType: string = ctx.args.source_type ?? "ipaddr";
+    const sourceContent: string = ctx.args.source_content ?? "";
+    const sourcePort: string = ctx.args.source_port ?? "80";
+
+    try {
+      await client.request("cdn.aliyuncs.com", "AddCdnDomain", {
+        DomainName: domain,
+        CdnType: cdnType,
+        Sources: JSON.stringify([
+          {
+            content: sourceContent,
+            type: sourceType,
+            port: parseInt(sourcePort, 10),
+            priority: "20",
+          },
+        ]),
+      });
+      return `CDN 加速域名添加成功!\n域名: ${domain}\n源站: ${sourceContent} (${sourceType}:${sourcePort})\n提示: 请配置 CNAME 解析使加速生效。`;
+    } catch (err: any) {
+      return `添加 CDN 域名失败: ${err.message ?? err}`;
+    }
+  });
+
+  // 删除 CDN 加速域名
+  handlers.set("delete_cdn_domain", async (ctx) => {
+    const domain: string = ctx.args.domain ?? "";
+
+    try {
+      await client.request("cdn.aliyuncs.com", "DeleteCdnDomain", {
+        DomainName: domain,
+      });
+      return `CDN 域名 ${domain} 已删除`;
+    } catch (err: any) {
+      return `删除 CDN 域名失败: ${err.message ?? err}`;
+    }
+  });
+
+  // 启用 CDN 加速域名
+  handlers.set("start_cdn_domain", async (ctx) => {
+    const domain: string = ctx.args.domain ?? "";
+
+    try {
+      await client.request("cdn.aliyuncs.com", "StartCdnDomain", {
+        DomainName: domain,
+      });
+      return `CDN 域名 ${domain} 已启用`;
+    } catch (err: any) {
+      return `启用 CDN 域名失败: ${err.message ?? err}`;
+    }
+  });
+
+  // 停用 CDN 加速域名
+  handlers.set("stop_cdn_domain", async (ctx) => {
+    const domain: string = ctx.args.domain ?? "";
+
+    try {
+      await client.request("cdn.aliyuncs.com", "StopCdnDomain", {
+        DomainName: domain,
+      });
+      return `CDN 域名 ${domain} 已停用`;
+    } catch (err: any) {
+      return `停用 CDN 域名失败: ${err.message ?? err}`;
     }
   });
 

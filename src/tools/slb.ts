@@ -41,6 +41,47 @@ const definitions: ToolDefinition[] = [
       required: ["lb_id"],
     },
   },
+  {
+    name: "create_load_balancer",
+    description: "创建负载均衡实例（简化版，复杂配置建议使用控制台）",
+    command: "create_load_balancer",
+    parameters: {
+      type: "object",
+      properties: {
+        region: { type: "string", description: "区域 ID，如 cn-hangzhou" },
+        lb_name: { type: "string", description: "负载均衡名称，可选" },
+        address_type: { type: "string", description: "网络类型: internet(公网) / intranet(内网)，默认 internet" },
+        vpc_id: { type: "string", description: "VPC ID（内网类型必填）" },
+        vswitch_id: { type: "string", description: "交换机 ID（内网类型必填）" },
+      },
+      required: ["region"],
+    },
+  },
+  {
+    name: "delete_load_balancer",
+    description: "释放负载均衡实例",
+    command: "delete_load_balancer",
+    parameters: {
+      type: "object",
+      properties: {
+        lb_id: { type: "string", description: "负载均衡实例 ID" },
+      },
+      required: ["lb_id"],
+    },
+  },
+  {
+    name: "set_lb_status",
+    description: "设置负载均衡实例状态（启用/停用）",
+    command: "set_lb_status",
+    parameters: {
+      type: "object",
+      properties: {
+        lb_id: { type: "string", description: "负载均衡实例 ID" },
+        status: { type: "string", description: "状态: active(启用) / inactive(停用)" },
+      },
+      required: ["lb_id", "status"],
+    },
+  },
 ];
 
 /** 创建 SLB 模块的 handler 映射 */
@@ -132,6 +173,68 @@ function createHandlers(client: AliyunClient): Map<string, ToolHandler> {
       return `监听列表（共 ${listeners.length} 个）:\n${lines.join("\n")}`;
     } catch (err: any) {
       return `列出监听失败: ${err.message ?? err}`;
+    }
+  });
+
+  // 创建负载均衡实例（简化版）
+  handlers.set("create_load_balancer", async (ctx) => {
+    const region: string = ctx.args.region ?? "";
+    const lbName: string = ctx.args.lb_name ?? "";
+    const addressType: string = ctx.args.address_type ?? "internet";
+    const vpcId: string = ctx.args.vpc_id ?? "";
+    const vswitchId: string = ctx.args.vswitch_id ?? "";
+
+    const params: Record<string, string> = {
+      RegionId: region,
+      AddressType: addressType,
+      PayType: "PayOnDemand",
+    };
+    if (lbName) {
+      params.LoadBalancerName = lbName;
+    }
+    if (vpcId) {
+      params.VpcId = vpcId;
+    }
+    if (vswitchId) {
+      params.VSwitchId = vswitchId;
+    }
+
+    try {
+      const res = await client.request("slb.aliyuncs.com", "CreateLoadBalancer", params);
+      return `负载均衡创建成功!\nID: ${res.LoadBalancerId}\n地址: ${res.Address ?? "分配中"}\n提示: 如需配置监听、后端服务器组等，建议使用阿里云控制台。`;
+    } catch (err: any) {
+      return `创建负载均衡失败: ${err.message ?? err}`;
+    }
+  });
+
+  // 释放负载均衡实例
+  handlers.set("delete_load_balancer", async (ctx) => {
+    const lbId: string = ctx.args.lb_id ?? "";
+
+    try {
+      await client.request("slb.aliyuncs.com", "DeleteLoadBalancer", {
+        LoadBalancerId: lbId,
+      });
+      return `负载均衡 ${lbId} 已释放`;
+    } catch (err: any) {
+      return `释放负载均衡失败: ${err.message ?? err}`;
+    }
+  });
+
+  // 设置负载均衡状态
+  handlers.set("set_lb_status", async (ctx) => {
+    const lbId: string = ctx.args.lb_id ?? "";
+    const status: string = ctx.args.status ?? "";
+
+    try {
+      await client.request("slb.aliyuncs.com", "SetLoadBalancerStatus", {
+        LoadBalancerId: lbId,
+        LoadBalancerStatus: status,
+      });
+      const statusText = status === "active" ? "启用" : "停用";
+      return `负载均衡 ${lbId} 已${statusText}`;
+    } catch (err: any) {
+      return `设置负载均衡状态失败: ${err.message ?? err}`;
     }
   });
 

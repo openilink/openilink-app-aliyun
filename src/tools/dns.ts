@@ -84,6 +84,22 @@ const definitions: ToolDefinition[] = [
       required: ["record_id", "status"],
     },
   },
+  {
+    name: "batch_add_dns_records",
+    description: "批量添加 DNS 解析记录（逐条添加，返回每条结果）",
+    command: "batch_add_dns_records",
+    parameters: {
+      type: "object",
+      properties: {
+        domain: { type: "string", description: "域名，如 example.com" },
+        records: {
+          type: "string",
+          description: '记录列表 JSON 数组，每项包含 rr/type/value，如 [{"rr":"www","type":"A","value":"1.2.3.4"},{"rr":"mail","type":"CNAME","value":"mail.example.com"}]',
+        },
+      },
+      required: ["domain", "records"],
+    },
+  },
 ];
 
 /** 创建 DNS 模块的 handler 映射 */
@@ -211,6 +227,45 @@ function createHandlers(client: AliyunClient): Map<string, ToolHandler> {
     } catch (err: any) {
       return `设置解析记录状态失败: ${err.message ?? err}`;
     }
+  });
+
+  // 批量添加解析记录
+  handlers.set("batch_add_dns_records", async (ctx) => {
+    const domain: string = ctx.args.domain ?? "";
+    const recordsStr: string = ctx.args.records ?? "[]";
+
+    let records: Array<{ rr: string; type: string; value: string }>;
+    try {
+      records = JSON.parse(recordsStr);
+    } catch {
+      return "records 参数格式错误，请提供有效的 JSON 数组";
+    }
+
+    if (!Array.isArray(records) || records.length === 0) {
+      return "records 数组为空，请至少提供一条记录";
+    }
+
+    const results: string[] = [];
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const record of records) {
+      try {
+        const res = await client.request("alidns.aliyuncs.com", "AddDomainRecord", {
+          DomainName: domain,
+          RR: record.rr,
+          Type: record.type,
+          Value: record.value,
+        });
+        results.push(`✓ ${record.rr}.${domain} → ${record.value} (${record.type}) [ID: ${res.RecordId}]`);
+        successCount++;
+      } catch (err: any) {
+        results.push(`✗ ${record.rr}.${domain} → ${record.value} (${record.type}) 失败: ${err.message ?? err}`);
+        failCount++;
+      }
+    }
+
+    return `批量添加完成: 成功 ${successCount} 条，失败 ${failCount} 条\n${results.join("\n")}`;
   });
 
   return handlers;
